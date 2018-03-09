@@ -23,7 +23,6 @@ petrolMY <- matrix(kpdnkk[c(5:length(kpdnkk))], ncol = 4, byrow = TRUE) %>%
   as_tibble() %>% 
   mutate_at(.vars = c(2:4), funs(as.numeric(.))) %>% 
   mutate_at(.vars = 1, funs(dmy(str_replace(., "^[[:digit:]].+[[:punct:]]", "")) - 6))
-
 petrolMY
 
 
@@ -65,27 +64,53 @@ crude_oil <- Quandl("CHRIS/ICE_B1", api_key="DM3iRry7DLwc7HogTC-w", start_date="
 crude_oil
 
 
-# Create a function to detect oil price change
+# Create a function to detect oil price change. 'mutate_at' will pass each selected column
 priceChange <- function(x) {
   if_else(x > 0, "Up", if_else(x < 0, "Down", "Maintains"))
 }
 
 
+# Create a function to rename the column name. 'rename_at' will pass the names of each selected column
+nameChange <- function(x) {
+  str_replace(x, "_Diff", "")
+}
 
-petrolMY %>% 
+
+nameChange2 <- function(x, name) {
+  str_c(name, x)
+}
+
+
+# Create a column to specify price change and the change direction
+petrolMY <- petrolMY %>% 
   mutate(RON95_Diff = RON95 - lag(RON95), 
          RON97_Diff = RON97 - lag(RON97), 
          DIESEL_Diff = DIESEL - lag(DIESEL)) %>% 
-  mutate_at(vars(contains("_Diff")), funs(Change = priceChange(.))) %>% 
+  mutate_at(vars(contains("_Diff")), funs(Chg = priceChange(.))) %>% 
+  rename_at(vars(contains("_Chg")), funs(nameChange(.))) %>% 
   select(DATE, RON95, everything())
 
 
+# Group USD exchange rate data by custome work-week and tidy-up the data
+USD_data <- exchange_rate %>% 
+  filter(Date >= "2017-03-30") %>% 
+  mutate(Day = wday(Date, label = TRUE, week_start = 4), Week = Date - ((as.integer(Day)) - 1) %% 7) %>% 
+  select(-Date) %>% 
+  spread(key = Day, value = USD) %>% 
+  rename_at(vars(-starts_with("Week")), funs(nameChange2(., "USD_")))
+
+
+# Random testing
 combine <- crude_oil %>% right_join(exchange_rate, by = c("Date" = "Date"))
 sum(is.na(combine))
 combine %>% filter(is.na(Settle) | is.na(USD))
-combine
-
-
+combine %>% filter(Date >= "2017-03-30") %>% mutate(Day       = wday(Date, label = TRUE),
+                                                    rand      = wday(Date),
+                                                    Day_Thur  = wday(Date, week_start = 4),
+                                                    test_Thur = Date - ((as.integer(Day_Thur) - 1) %% 7),
+                                                    Day_Sun   = wday(Date),
+                                                    test_Sun  = Date - ((as.integer(Day_Sun) - 5) %% 7),
+                                                    test_Tues = Date - ((as.integer(Day) - 3) %% 7))
 
 
 
