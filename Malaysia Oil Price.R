@@ -58,10 +58,10 @@ exchange_rate %>% tail()
 
 # Read the historical brent crude oil price using quandl
 # crude_oil <- Quandl("COM/OIL_BRENT", api_key="DM3iRry7DLwc7HogTC-w", start_date="2017-01-01")
-crude_oil <- Quandl("CHRIS/ICE_B1", api_key="DM3iRry7DLwc7HogTC-w", start_date="2017-03-01") %>% 
+crudeOil_rawdata <- Quandl("CHRIS/ICE_B1", api_key="DM3iRry7DLwc7HogTC-w", start_date="2017-03-01") %>% 
   as_tibble() %>% 
   select(Date, Settle)
-crude_oil
+crudeOil_rawdata
 
 
 # Create a function to detect oil price change. 'mutate_at' will pass each selected column
@@ -91,14 +91,40 @@ petrolMY <- petrolMY %>%
   select(DATE, RON95, everything())
 
 
-# Group USD exchange rate data by custome work-week and tidy-up the data
-USD_data <- exchange_rate %>% 
+# Group USD exchange rate data by custom work-week and tidy-up the data
+USD_rawdata <- exchange_rate %>% 
   filter(Date >= "2017-03-30") %>% 
   mutate(Day = wday(Date, label = TRUE, week_start = 4), Week = Date - ((as.integer(Day)) - 1) %% 7) %>% 
   select(-Date) %>% 
   spread(key = Day, value = USD) %>% 
   rename_at(vars(-starts_with("Week")), funs(nameChange2(., "USD_")))
 
+
+# Check for missing values in USD data
+USD_rawdata %>% 
+  filter_at(vars(-starts_with("Week")), any_vars(is.na(.)))
+
+
+# Fill up the missing value based on previous days
+USD <- USD_rawdata %>% 
+  gather(USD_Thu:USD_Wed, key = "Days", value = "USD_Rate") %>% 
+  mutate_if(is.character, as_factor) %>% 
+  arrange(Week, Days) %>% 
+  fill(USD_Rate) %>% 
+  spread(key = Days, value = USD_Rate)
+
+
+# Group crude oil price data by custom work week
+crude_oil <- crudeOil_rawdata %>% 
+  arrange(Date) %>% 
+  filter(Date >= "2017-03-30") %>% 
+  mutate(CustomWeek = Date - wday(Date, week_start = 4) + 1, 
+         Day = wday(Date, label = TRUE) %>% as.character() %>% as_factor()) %>% 
+  select(-Date) %>% 
+  spread(key = Day, value = Settle)
+
+crude_oil %>% 
+  gather()
 
 # Random testing
 combine <- crude_oil %>% right_join(exchange_rate, by = c("Date" = "Date"))
