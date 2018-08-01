@@ -4,6 +4,7 @@ library(rvest)
 library(Quandl)
 library(lubridate)
 
+
 # Read the historical oil price table from the KPDNKK webpage 
 kpdnkk <- read_html("https://www.kpdnkk.gov.my/kpdnkk/oil-price-2018/?lang=en") %>% 
   html_nodes(".col-md-2 , #content .col-md-6:nth-child(1)") %>% 
@@ -54,11 +55,13 @@ exchange_rate <- bnm %>%
   mutate(Date = dmy(Date), USD = as.numeric(USD))
 exchange_rate %>% tail()
 
+# Read API Key for Quandl from text file. Put your own API key to a text file. 
+my_key <- read_table("quandl_api.txt", col_names = FALSE) %>% as.character()
 
 
 # Read the historical brent crude oil price using quandl
-# crude_oil <- Quandl("COM/OIL_BRENT", api_key="DM3iRry7DLwc7HogTC-w", start_date="2017-01-01")
-crudeOil_rawdata <- Quandl("CHRIS/ICE_B1", api_key="DM3iRry7DLwc7HogTC-w", start_date="2017-03-01") %>% 
+# crude_oil <- Quandl("COM/OIL_BRENT", api_key=my_key, start_date="2017-01-01")
+crudeOil_rawdata <- Quandl("CHRIS/ICE_B1", api_key=my_key, start_date="2017-03-01") %>% 
   as_tibble() %>% 
   select(Date, Settle)
 crudeOil_rawdata
@@ -105,7 +108,7 @@ USD_rawdata %>%
   filter_at(vars(-starts_with("Week")), any_vars(is.na(.)))
 
 
-# Fill up the missing value based on previous days
+# Fill up USD data missing values based on previous days
 USD <- USD_rawdata %>% 
   gather(USD_Thu:USD_Wed, key = "Days", value = "USD_Rate") %>% 
   mutate_if(is.character, as_factor) %>% 
@@ -118,13 +121,21 @@ USD <- USD_rawdata %>%
 crude_oil <- crudeOil_rawdata %>% 
   arrange(Date) %>% 
   filter(Date >= "2017-03-30") %>% 
-  mutate(CustomWeek = Date - wday(Date, week_start = 4) + 1, 
+  mutate(Week = Date - wday(Date, week_start = 4) + 1, 
          Day = wday(Date, label = TRUE) %>% as.character() %>% as_factor()) %>% 
   select(-Date) %>% 
-  spread(key = Day, value = Settle)
+  spread(key = Day, value = Settle) %>% 
+  rename_if(is.numeric, funs(nameChange2(., "Brent_")))
 
+
+# Check for missing values in crude oil data
 crude_oil %>% 
-  gather()
+  filter_at(vars(-starts_with("Week")), any_vars(is.na(.)))
+
+
+# Fill-up crude oil missing values
+
+
 
 # Random testing
 combine <- crude_oil %>% right_join(exchange_rate, by = c("Date" = "Date"))
